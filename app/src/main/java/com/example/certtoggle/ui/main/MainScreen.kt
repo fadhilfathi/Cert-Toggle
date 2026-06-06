@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -178,6 +179,26 @@ fun MainContent(
                 onToggle(!trust)
               }
             )
+          }
+          
+          Spacer(modifier = Modifier.height(12.dp))
+          
+          val context = LocalContext.current
+          Button(
+            onClick = { openSettings(context) },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+              containerColor = MaterialTheme.colorScheme.primary,
+              contentColor = MaterialTheme.colorScheme.onPrimary
+            ),
+            shape = RoundedCornerShape(8.dp)
+          ) {
+            Icon(
+              imageVector = Icons.Default.Settings,
+              contentDescription = "Settings"
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Open Settings", fontWeight = FontWeight.Bold)
           }
         } else {
           Row(
