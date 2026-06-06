@@ -37,7 +37,7 @@ class DefaultDataRepository : DataRepository {
       
       try {
         val factory = CertificateFactory.getInstance("X.509")
-        val mountsContent = getMountsContent()
+        val removedCerts = getRemovedCertificates()
 
         for (dirPath in certDirs) {
           val dir = File(dirPath)
@@ -53,7 +53,7 @@ class DefaultDataRepository : DataRepository {
                       val issuer = cert.issuerDN.name
                       
                       if (containsKeyword(subject, issuer)) {
-                        val disabled = mountsContent.contains(file.absolutePath)
+                        val disabled = removedCerts.contains(file.name)
                         certList.add(
                           CertInfo(
                             fileName = file.name,
@@ -81,17 +81,24 @@ class DefaultDataRepository : DataRepository {
     }
   }
 
-  private fun getMountsContent(): String {
+  private fun getRemovedCertificates(): Set<String> {
     return try {
-      val file = File("/proc/mounts")
-      if (file.exists()) {
-        file.readText()
-      } else {
-        val process = Runtime.getRuntime().exec("mount")
-        process.inputStream.bufferedReader().use { it.readText() }
-      }
+      val process = Runtime.getRuntime().exec("su")
+      val os = process.outputStream
+      val isInput = process.inputStream
+      
+      os.write("ls /data/misc/user/0/cacerts-removed 2>/dev/null; ls /data/misc/keychain/cacerts-removed 2>/dev/null\n".toByteArray())
+      os.write("exit\n".toByteArray())
+      os.flush()
+      
+      process.waitFor()
+      val output = isInput.bufferedReader().use { it.readText() }
+      output.split("\n")
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .toSet()
     } catch (e: Exception) {
-      ""
+      emptySet()
     }
   }
 
@@ -107,15 +114,25 @@ class DefaultDataRepository : DataRepository {
       val certs = _certificates.value
       if (certs.isEmpty()) return@withContext true
 
-      val commands = certs.map { cert ->
+      val sb = StringBuilder()
+      for (cert in certs) {
         if (disable) {
-          "mount -o bind /dev/null \"${cert.filePath}\" 2>/dev/null"
+          sb.append("mkdir -p /data/misc/user/0/cacerts-removed\n")
+          sb.append("cp \"${cert.filePath}\" /data/misc/user/0/cacerts-removed/${cert.fileName}\n")
+          sb.append("chown system:system /data/misc/user/0/cacerts-removed/${cert.fileName}\n")
+          sb.append("chmod 644 /data/misc/user/0/cacerts-removed/${cert.fileName}\n")
+          
+          sb.append("mkdir -p /data/misc/keychain/cacerts-removed\n")
+          sb.append("cp \"${cert.filePath}\" /data/misc/keychain/cacerts-removed/${cert.fileName}\n")
+          sb.append("chown system:system /data/misc/keychain/cacerts-removed/${cert.fileName}\n")
+          sb.append("chmod 644 /data/misc/keychain/cacerts-removed/${cert.fileName}\n")
         } else {
-          "umount \"${cert.filePath}\" 2>/dev/null"
+          sb.append("rm -f /data/misc/user/0/cacerts-removed/${cert.fileName}\n")
+          sb.append("rm -f /data/misc/keychain/cacerts-removed/${cert.fileName}\n")
         }
       }
 
-      val script = commands.joinToString("\n")
+      val script = sb.toString()
       val success = runAsRoot(script)
       
       // Refresh state after toggling
