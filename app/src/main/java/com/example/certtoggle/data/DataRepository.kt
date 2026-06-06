@@ -87,8 +87,19 @@ class DefaultDataRepository : DataRepository {
       val os = process.outputStream
       val isInput = process.inputStream
       
-      os.write("ls /data/misc/user/0/cacerts-removed 2>/dev/null; ls /data/misc/keychain/cacerts-removed 2>/dev/null\n".toByteArray())
-      os.write("exit\n".toByteArray())
+      val command = """
+        ls /data/misc/keychain/cacerts-removed 2>/dev/null
+        for udir in /data/misc/user/*; do
+          if [ -d "${'$'}udir" ]; then
+            uid=${'$'}(basename "${'$'}udir")
+            ls "/data/misc/user/${'$'}uid/cacerts-removed" 2>/dev/null
+            ls "/data/misc/keychain/user/${'$'}uid/cacerts-removed" 2>/dev/null
+          fi
+        done
+      """.trimIndent()
+      
+      os.write((command + "\n").toByteArray())
+      os.write("exit 0\n".toByteArray())
       os.flush()
       
       process.waitFor()
@@ -117,18 +128,48 @@ class DefaultDataRepository : DataRepository {
       val sb = StringBuilder()
       for (cert in certs) {
         if (disable) {
-          sb.append("mkdir -p /data/misc/user/0/cacerts-removed\n")
-          sb.append("cp \"${cert.filePath}\" /data/misc/user/0/cacerts-removed/${cert.fileName}\n")
-          sb.append("chown system:system /data/misc/user/0/cacerts-removed/${cert.fileName}\n")
-          sb.append("chmod 644 /data/misc/user/0/cacerts-removed/${cert.fileName}\n")
-          
-          sb.append("mkdir -p /data/misc/keychain/cacerts-removed\n")
-          sb.append("cp \"${cert.filePath}\" /data/misc/keychain/cacerts-removed/${cert.fileName}\n")
-          sb.append("chown system:system /data/misc/keychain/cacerts-removed/${cert.fileName}\n")
-          sb.append("chmod 644 /data/misc/keychain/cacerts-removed/${cert.fileName}\n")
+          sb.append("""
+            # Global keychain path
+            mkdir -p /data/misc/keychain/cacerts-removed
+            cp "${cert.filePath}" /data/misc/keychain/cacerts-removed/${cert.fileName}
+            chown system:system /data/misc/keychain/cacerts-removed/${cert.fileName}
+            chmod 644 /data/misc/keychain/cacerts-removed/${cert.fileName}
+            restorecon /data/misc/keychain/cacerts-removed/${cert.fileName} 2>/dev/null
+            
+            # Loop through all user directories in /data/misc/user
+            for udir in /data/misc/user/*; do
+              if [ -d "${'$'}udir" ]; then
+                uid=${'$'}(basename "${'$'}udir")
+                
+                # Path 1: /data/misc/user/uid/cacerts-removed
+                mkdir -p "/data/misc/user/${'$'}uid/cacerts-removed"
+                cp "${cert.filePath}" "/data/misc/user/${'$'}uid/cacerts-removed/${cert.fileName}"
+                chown system:system "/data/misc/user/${'$'}uid/cacerts-removed/${cert.fileName}"
+                chmod 644 "/data/misc/user/${'$'}uid/cacerts-removed/${cert.fileName}"
+                restorecon "/data/misc/user/${'$'}uid/cacerts-removed/${cert.fileName}" 2>/dev/null
+                
+                # Path 2: /data/misc/keychain/user/uid/cacerts-removed
+                mkdir -p "/data/misc/keychain/user/${'$'}uid/cacerts-removed"
+                cp "${cert.filePath}" "/data/misc/keychain/user/${'$'}uid/cacerts-removed/${cert.fileName}"
+                chown system:system "/data/misc/keychain/user/${'$'}uid/cacerts-removed/${cert.fileName}"
+                chmod 644 "/data/misc/keychain/user/${'$'}uid/cacerts-removed/${cert.fileName}"
+                restorecon "/data/misc/keychain/user/${'$'}uid/cacerts-removed/${cert.fileName}" 2>/dev/null
+              fi
+            done
+          """.trimIndent())
+          sb.append("\n")
         } else {
-          sb.append("rm -f /data/misc/user/0/cacerts-removed/${cert.fileName}\n")
-          sb.append("rm -f /data/misc/keychain/cacerts-removed/${cert.fileName}\n")
+          sb.append("""
+            rm -f /data/misc/keychain/cacerts-removed/${cert.fileName}
+            for udir in /data/misc/user/*; do
+              if [ -d "${'$'}udir" ]; then
+                uid=${'$'}(basename "${'$'}udir")
+                rm -f "/data/misc/user/${'$'}uid/cacerts-removed/${cert.fileName}"
+                rm -f "/data/misc/keychain/user/${'$'}uid/cacerts-removed/${cert.fileName}"
+              fi
+            done
+          """.trimIndent())
+          sb.append("\n")
         }
       }
 
@@ -147,7 +188,7 @@ class DefaultDataRepository : DataRepository {
       val process = Runtime.getRuntime().exec("su")
       process.outputStream.use { os ->
         os.write((script + "\n").toByteArray())
-        os.write("exit\n".toByteArray())
+        os.write("exit 0\n".toByteArray())
         os.flush()
       }
       val exitCode = process.waitFor()
