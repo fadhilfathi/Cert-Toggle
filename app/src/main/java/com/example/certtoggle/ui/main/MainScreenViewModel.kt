@@ -20,6 +20,8 @@ class MainScreenViewModel(private val dataRepository: DataRepository) : ViewMode
     }
   }
 
+  val isRooted: Boolean = dataRepository.isRooted
+
   val uiState: StateFlow<MainScreenUiState> =
     combine(dataRepository.certificates, isToggling) { certs, toggling ->
       MainScreenUiState.Success(

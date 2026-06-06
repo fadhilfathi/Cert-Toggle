@@ -19,6 +19,7 @@ data class CertInfo(
 
 interface DataRepository {
   val certificates: Flow<List<CertInfo>>
+  val isRooted: Boolean
   suspend fun refresh()
   suspend fun toggleAll(disable: Boolean): Boolean
 }
@@ -26,6 +27,34 @@ interface DataRepository {
 class DefaultDataRepository : DataRepository {
   private val _certificates = MutableStateFlow<List<CertInfo>>(emptyList())
   override val certificates: Flow<List<CertInfo>> = _certificates.asStateFlow()
+
+  override val isRooted: Boolean
+    get() = checkRoot()
+
+  private fun checkRoot(): Boolean {
+    val paths = listOf(
+      "/system/bin/su",
+      "/system/xbin/su",
+      "/sbin/su",
+      "/system/sd/xbin/su",
+      "/system/bin/failsafe/su",
+      "/data/local/xbin/su",
+      "/data/local/bin/su",
+      "/data/local/su",
+      "/system/sbin/su",
+      "/usr/bin/su"
+    )
+    for (path in paths) {
+      if (File(path).exists()) return true
+    }
+    return try {
+      val process = Runtime.getRuntime().exec("which su")
+      val exitCode = process.waitFor()
+      exitCode == 0
+    } catch (e: Exception) {
+      false
+    }
+  }
 
   override suspend fun refresh() {
     withContext(Dispatchers.IO) {
@@ -37,7 +66,15 @@ class DefaultDataRepository : DataRepository {
       
       try {
         val factory = CertificateFactory.getInstance("X.509")
-        val removedCerts = getRemovedCertificates()
+        
+        // Load active trust store aliases dynamically via KeyStore API
+        val trustStore = java.security.KeyStore.getInstance("AndroidCAStore")
+        trustStore.load(null, null)
+        val activeAliases = mutableSetOf<String>()
+        val aliases = trustStore.aliases()
+        while (aliases.hasMoreElements()) {
+          activeAliases.add(aliases.nextElement())
+        }
 
         for (dirPath in certDirs) {
           val dir = File(dirPath)
@@ -53,7 +90,10 @@ class DefaultDataRepository : DataRepository {
                       val issuer = cert.issuerDN.name
                       
                       if (containsKeyword(subject, issuer)) {
-                        val disabled = removedCerts.contains(file.name)
+                        // system certificates prefix in AndroidCAStore is "system:"
+                        val systemAlias = "system:${file.name}"
+                        val disabled = !activeAliases.contains(systemAlias)
+                        
                         certList.add(
                           CertInfo(
                             fileName = file.name,
@@ -81,38 +121,6 @@ class DefaultDataRepository : DataRepository {
     }
   }
 
-  private fun getRemovedCertificates(): Set<String> {
-    return try {
-      val process = Runtime.getRuntime().exec("su")
-      val os = process.outputStream
-      val isInput = process.inputStream
-      
-      val command = """
-        ls /data/misc/keychain/cacerts-removed 2>/dev/null
-        for udir in /data/misc/user/*; do
-          if [ -d "${'$'}udir" ]; then
-            uid=${'$'}(basename "${'$'}udir")
-            ls "/data/misc/user/${'$'}uid/cacerts-removed" 2>/dev/null
-            ls "/data/misc/keychain/user/${'$'}uid/cacerts-removed" 2>/dev/null
-          fi
-        done
-      """.trimIndent()
-      
-      os.write((command + "\n").toByteArray())
-      os.write("exit 0\n".toByteArray())
-      os.flush()
-      
-      process.waitFor()
-      val output = isInput.bufferedReader().use { it.readText() }
-      output.split("\n")
-        .map { it.trim() }
-        .filter { it.isNotEmpty() }
-        .toSet()
-    } catch (e: Exception) {
-      emptySet()
-    }
-  }
-
   private fun containsKeyword(subject: String, issuer: String): Boolean {
     val keywords = listOf("digicert", "globalsign", "ssl")
     val subLower = subject.lowercase()
@@ -121,6 +129,8 @@ class DefaultDataRepository : DataRepository {
   }
 
   override suspend fun toggleAll(disable: Boolean): Boolean {
+    if (!isRooted) return false
+    
     return withContext(Dispatchers.IO) {
       val certs = _certificates.value
       if (certs.isEmpty()) return@withContext true

@@ -12,9 +12,13 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -35,6 +39,31 @@ fun MainScreen(
   viewModel: MainScreenViewModel = viewModel { MainScreenViewModel(DefaultDataRepository()) },
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
+  val context = LocalContext.current
+  var showRootWarning by remember { mutableStateOf(false) }
+
+  if (showRootWarning) {
+    AlertDialog(
+      onDismissRequest = { showRootWarning = false },
+      title = { Text("Root Access Required") },
+      text = { Text("Android's security model prevents non-rooted apps from programmatically disabling system certificates. You can disable them manually in settings under 'Trusted credentials'.") },
+      confirmButton = {
+        TextButton(
+          onClick = {
+            showRootWarning = false
+            openSettings(context)
+          }
+        ) {
+          Text("Open Settings")
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { showRootWarning = false }) {
+          Text("Cancel")
+        }
+      }
+    )
+  }
 
   Scaffold(
     topBar = {
@@ -66,7 +95,13 @@ fun MainScreen(
           MainContent(
             certificates = currentState.certificates,
             isToggling = currentState.isToggling,
-            onToggle = { disable -> viewModel.toggleAll(disable) },
+            onToggle = { disable -> 
+              if (viewModel.isRooted) {
+                viewModel.toggleAll(disable)
+              } else {
+                showRootWarning = true
+              }
+            },
             modifier = Modifier.fillMaxSize()
           )
         }
@@ -289,4 +324,22 @@ fun getCommonName(dn: String): String {
   val regex = "CN=([^,]+)".toRegex(RegexOption.IGNORE_CASE)
   val match = regex.find(dn)
   return match?.groupValues?.get(1) ?: dn
+}
+
+fun openSettings(context: android.content.Context) {
+  try {
+    val intent = android.content.Intent("com.android.settings.TRUSTED_CREDENTIALS")
+    intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+    context.startActivity(intent)
+  } catch (e: Exception) {
+    try {
+      val intent = android.content.Intent(android.provider.Settings.ACTION_SECURITY_SETTINGS)
+      intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+      context.startActivity(intent)
+    } catch (ex: Exception) {
+      val intent = android.content.Intent(android.provider.Settings.ACTION_SETTINGS)
+      intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+      context.startActivity(intent)
+    }
+  }
 }
