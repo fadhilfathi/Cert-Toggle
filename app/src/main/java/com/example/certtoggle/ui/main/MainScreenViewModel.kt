@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 
 class MainScreenViewModel(private val dataRepository: DataRepository) : ViewModel() {
   private val isToggling = MutableStateFlow(false)
+  private val isRefreshing = MutableStateFlow(false)
 
   init {
     viewModelScope.launch {
@@ -23,10 +24,11 @@ class MainScreenViewModel(private val dataRepository: DataRepository) : ViewMode
   val isRooted: Boolean = dataRepository.isRooted
 
   val uiState: StateFlow<MainScreenUiState> =
-    combine(dataRepository.certificates, isToggling) { certs, toggling ->
+    combine(dataRepository.certificates, isToggling, isRefreshing) { certs, toggling, refreshing ->
       MainScreenUiState.Success(
         certificates = certs,
-        isToggling = toggling
+        isToggling = toggling,
+        isRefreshing = refreshing
       )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MainScreenUiState.Loading)
 
@@ -40,7 +42,9 @@ class MainScreenViewModel(private val dataRepository: DataRepository) : ViewMode
 
   fun refresh() {
     viewModelScope.launch {
+      isRefreshing.value = true
       dataRepository.refresh()
+      isRefreshing.value = false
     }
   }
 }
@@ -49,6 +53,7 @@ sealed interface MainScreenUiState {
   object Loading : MainScreenUiState
   data class Success(
     val certificates: List<CertInfo>,
-    val isToggling: Boolean
+    val isToggling: Boolean,
+    val isRefreshing: Boolean = false
   ) : MainScreenUiState
 }

@@ -1,10 +1,12 @@
 package com.example.certtoggle.ui.main
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
@@ -14,11 +16,13 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -76,17 +80,30 @@ fun MainScreen(
       CenterAlignedTopAppBar(
         title = { Text("Cert Toggle", fontWeight = FontWeight.Bold) },
         actions = {
+          val isRefreshing = (state as? MainScreenUiState.Success)?.isRefreshing ?: (state == MainScreenUiState.Loading)
           val rotation = remember { Animatable(0f) }
-          val coroutineScope = rememberCoroutineScope()
-          IconButton(onClick = { 
-            coroutineScope.launch {
-              rotation.animateTo(
-                targetValue = rotation.targetValue + 360f,
-                animationSpec = tween(durationMillis = 1000)
-              )
+          
+          LaunchedEffect(isRefreshing) {
+            if (isRefreshing) {
+              while (true) {
+                rotation.animateTo(
+                  targetValue = rotation.value + 360f,
+                  animationSpec = tween(durationMillis = 1000, easing = LinearEasing)
+                )
+              }
+            } else {
+              val currentVal = rotation.value
+              val remainder = currentVal % 360f
+              if (remainder > 0f) {
+                rotation.animateTo(
+                  targetValue = currentVal + (360f - remainder),
+                  animationSpec = tween(durationMillis = 300, easing = LinearEasing)
+                )
+              }
             }
-            viewModel.refresh() 
-          }) {
+          }
+
+          IconButton(onClick = { viewModel.refresh() }) {
             Icon(
               Icons.Default.Refresh, 
               contentDescription = "Refresh",
@@ -115,6 +132,8 @@ fun MainScreen(
           MainContent(
             certificates = currentState.certificates,
             isToggling = currentState.isToggling,
+            isRefreshing = currentState.isRefreshing,
+            onRefresh = { viewModel.refresh() },
             onToggle = { disable -> 
               if (viewModel.isRooted) {
                 viewModel.toggleAll(disable)
@@ -134,6 +153,8 @@ fun MainScreen(
 fun MainContent(
   certificates: List<CertInfo>,
   isToggling: Boolean,
+  isRefreshing: Boolean,
+  onRefresh: () -> Unit,
   onToggle: (Boolean) -> Unit,
   modifier: Modifier = Modifier
 ) {
@@ -283,7 +304,22 @@ fun MainContent(
         }
       }
     } else {
+      val listState = rememberLazyListState()
+      
+      LaunchedEffect(listState, isRefreshing) {
+        snapshotFlow { 
+          val isAtBottom = !listState.canScrollForward
+          val isScrolling = listState.isScrollInProgress
+          isAtBottom && isScrolling
+        }.collect { shouldRefresh ->
+          if (shouldRefresh && !isRefreshing) {
+            onRefresh()
+          }
+        }
+      }
+
       LazyColumn(
+        state = listState,
         modifier = Modifier
           .fillMaxWidth()
           .weight(1f),
