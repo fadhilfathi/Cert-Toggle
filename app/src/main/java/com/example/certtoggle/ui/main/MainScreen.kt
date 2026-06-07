@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -129,7 +130,11 @@ fun MainScreen(
           CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
         }
         is MainScreenUiState.Success -> {
-          Box(modifier = Modifier.fillMaxSize()) {
+          PullToRefreshBox(
+            isRefreshing = currentState.isRefreshing,
+            onRefresh = { viewModel.refresh() },
+            modifier = Modifier.fillMaxSize()
+          ) {
             MainContent(
               certificates = currentState.certificates,
               isToggling = currentState.isToggling,
@@ -185,172 +190,158 @@ fun MainContent(
   // If all matching certificates are active/enabled, then the overall toggle is ON (trusted).
   val isAnyDisabled = certificates.any { it.isDisabled }
   val isGlobalTrusted = certificates.isNotEmpty() && !isAnyDisabled
+  val listState = rememberLazyListState()
 
-  Column(
+  LazyColumn(
+    state = listState,
     modifier = modifier
       .fillMaxSize()
       .padding(16.dp),
-    horizontalAlignment = Alignment.CenterHorizontally
+    horizontalAlignment = Alignment.CenterHorizontally,
+    verticalArrangement = Arrangement.spacedBy(8.dp)
   ) {
     // Global Control Card
-    Card(
-      modifier = Modifier.fillMaxWidth(),
-      shape = RoundedCornerShape(16.dp),
-      colors = CardDefaults.cardColors(
-        containerColor = MaterialTheme.colorScheme.secondaryContainer
-      )
-    ) {
-      Column(
-        modifier = Modifier.padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-      ) {
-        Text(
-          text = "Global Trust Status",
-          style = MaterialTheme.typography.titleMedium,
-          color = MaterialTheme.colorScheme.onSecondaryContainer
+    item {
+      Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+          containerColor = MaterialTheme.colorScheme.secondaryContainer
         )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-          text = if (certificates.isEmpty()) "No target certificates found"
-                 else if (isGlobalTrusted) "Certs Trusted (Active)"
-                 else "Certs Blocked (Disabled)",
-          style = MaterialTheme.typography.headlineSmall,
-          fontWeight = FontWeight.Bold,
-          color = if (certificates.isEmpty()) MaterialTheme.colorScheme.outline
-                 else if (isGlobalTrusted) Color(0xFF2E7D32)
-                 else MaterialTheme.colorScheme.error
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        if (certificates.isNotEmpty()) {
-          Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier.fillMaxWidth()
-          ) {
-            Text(
-              text = "Trust certificates",
-              style = MaterialTheme.typography.bodyLarge,
-              color = MaterialTheme.colorScheme.onSecondaryContainer
-            )
-            Switch(
-              checked = isGlobalTrusted,
-              enabled = !isToggling,
-              onCheckedChange = { trust ->
-                // If the user turns the switch ON, it means they want to enable (trust) them.
-                // In toggleAll: disable = !trust
-                onToggle(!trust)
-              }
-            )
-          }
-          
-          Spacer(modifier = Modifier.height(12.dp))
-          
-          val context = LocalContext.current
-          Button(
-            onClick = { openSettings(context) },
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(
-              containerColor = MaterialTheme.colorScheme.primary,
-              contentColor = MaterialTheme.colorScheme.onPrimary
-            ),
-            shape = RoundedCornerShape(8.dp)
-          ) {
-            Icon(
-              imageVector = Icons.Default.Settings,
-              contentDescription = "Settings"
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Open Settings", fontWeight = FontWeight.Bold)
-          }
-        } else {
-          Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(vertical = 8.dp)
-          ) {
-            Icon(Icons.Default.Info, contentDescription = "Info", tint = MaterialTheme.colorScheme.outline)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-              text = "Make sure your device is rooted to find certificates in system paths.",
-              style = MaterialTheme.typography.bodyMedium,
-              color = MaterialTheme.colorScheme.outline
-            )
-          }
-        }
-        
-        if (isToggling) {
-          Spacer(modifier = Modifier.height(8.dp))
-          LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-        }
-      }
-    }
-
-    Spacer(modifier = Modifier.height(16.dp))
-
-    // List Title
-    Row(
-      modifier = Modifier
-        .fillMaxWidth()
-        .padding(bottom = 8.dp),
-      verticalAlignment = Alignment.CenterVertically
-    ) {
-      Text(
-        text = "Target Certificates (${certificates.size})",
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurface
-      )
-    }
-
-    if (certificates.isEmpty()) {
-      Box(
-        modifier = Modifier
-          .fillMaxWidth()
-          .weight(1f),
-        contentAlignment = Alignment.Center
       ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-          Icon(
-            Icons.Default.Warning,
-            contentDescription = "Warning",
-            modifier = Modifier.size(48.dp),
-            tint = MaterialTheme.colorScheme.outline
+        Column(
+          modifier = Modifier.padding(16.dp),
+          horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+          Text(
+            text = "Global Trust Status",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSecondaryContainer
           )
           Spacer(modifier = Modifier.height(8.dp))
           Text(
-            text = "No certificates found matching DigiCert, GlobalSign, or SSL.",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.outline,
-            modifier = Modifier.padding(horizontal = 32.dp),
-            textAlign = TextAlign.Center
+            text = if (certificates.isEmpty()) "No target certificates found"
+                   else if (isGlobalTrusted) "Certs Trusted (Active)"
+                   else "Certs Blocked (Disabled)",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = if (certificates.isEmpty()) MaterialTheme.colorScheme.outline
+                   else if (isGlobalTrusted) Color(0xFF2E7D32)
+                   else MaterialTheme.colorScheme.error
           )
-        }
-      }
-    } else {
-      val listState = rememberLazyListState()
-      
-      LaunchedEffect(listState, isRefreshing) {
-        snapshotFlow { 
-          val isAtBottom = !listState.canScrollForward
-          val isScrolling = listState.isScrollInProgress
-          isAtBottom && isScrolling
-        }.collect { shouldRefresh ->
-          if (shouldRefresh && !isRefreshing) {
-            onRefresh()
+          Spacer(modifier = Modifier.height(16.dp))
+          
+          if (certificates.isNotEmpty()) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.SpaceBetween,
+              modifier = Modifier.fillMaxWidth()
+            ) {
+              Text(
+                text = "Trust certificates",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+              )
+              Switch(
+                checked = isGlobalTrusted,
+                enabled = !isToggling,
+                onCheckedChange = { trust ->
+                  // If the user turns the switch ON, it means they want to enable (trust) them.
+                  // In toggleAll: disable = !trust
+                  onToggle(!trust)
+                }
+              )
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            val context = LocalContext.current
+            Button(
+              onClick = { openSettings(context) },
+              modifier = Modifier.fillMaxWidth(),
+              colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+              ),
+              shape = RoundedCornerShape(8.dp)
+            ) {
+              Icon(
+                imageVector = Icons.Default.Settings,
+                contentDescription = "Settings"
+              )
+              Spacer(modifier = Modifier.width(8.dp))
+              Text("Open Settings", fontWeight = FontWeight.Bold)
+            }
+          } else {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              modifier = Modifier.padding(vertical = 8.dp)
+            ) {
+              Icon(Icons.Default.Info, contentDescription = "Info", tint = MaterialTheme.colorScheme.outline)
+              Spacer(modifier = Modifier.width(8.dp))
+              Text(
+                text = "Make sure your device is rooted to find certificates in system paths.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.outline
+              )
+            }
+          }
+          
+          if (isToggling) {
+            Spacer(modifier = Modifier.height(8.dp))
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
           }
         }
       }
+    }
 
-      LazyColumn(
-        state = listState,
+    // List Title
+    item {
+      Spacer(modifier = Modifier.height(8.dp))
+      Row(
         modifier = Modifier
           .fillMaxWidth()
-          .weight(1f),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+          .padding(bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
       ) {
-        items(certificates) { cert ->
-          CertificateItem(cert)
+        Text(
+          text = "Target Certificates (${certificates.size})",
+          style = MaterialTheme.typography.titleLarge,
+          fontWeight = FontWeight.Bold,
+          color = MaterialTheme.colorScheme.onSurface
+        )
+      }
+    }
+
+    if (certificates.isEmpty()) {
+      item {
+        Box(
+          modifier = Modifier
+            .fillMaxWidth()
+            .fillParentMaxHeight(0.5f),
+          contentAlignment = Alignment.Center
+        ) {
+          Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+              Icons.Default.Warning,
+              contentDescription = "Warning",
+              modifier = Modifier.size(48.dp),
+              tint = MaterialTheme.colorScheme.outline
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+              text = "No certificates found matching DigiCert, GlobalSign, or SSL.",
+              style = MaterialTheme.typography.bodyLarge,
+              color = MaterialTheme.colorScheme.outline,
+              modifier = Modifier.padding(horizontal = 32.dp),
+              textAlign = TextAlign.Center
+            )
+          }
         }
+      }
+    } else {
+      items(certificates) { cert ->
+        CertificateItem(cert)
       }
     }
   }
