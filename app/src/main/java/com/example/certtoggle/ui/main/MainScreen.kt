@@ -1,5 +1,7 @@
 package com.example.certtoggle.ui.main
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -15,9 +17,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -31,6 +35,7 @@ import androidx.navigation3.runtime.NavKey
 import com.example.certtoggle.data.CertInfo
 import com.example.certtoggle.data.DefaultDataRepository
 import com.example.certtoggle.theme.CertToggleTheme
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,8 +76,22 @@ fun MainScreen(
       CenterAlignedTopAppBar(
         title = { Text("Cert Toggle", fontWeight = FontWeight.Bold) },
         actions = {
-          IconButton(onClick = { viewModel.refresh() }) {
-            Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+          val rotation = remember { Animatable(0f) }
+          val coroutineScope = rememberCoroutineScope()
+          IconButton(onClick = { 
+            coroutineScope.launch {
+              rotation.animateTo(
+                targetValue = rotation.targetValue + 360f,
+                animationSpec = tween(durationMillis = 1000)
+              )
+            }
+            viewModel.refresh() 
+          }) {
+            Icon(
+              Icons.Default.Refresh, 
+              contentDescription = "Refresh",
+              modifier = Modifier.rotate(rotation.value)
+            )
           }
         },
         colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
