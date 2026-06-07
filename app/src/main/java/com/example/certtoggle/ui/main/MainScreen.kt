@@ -129,20 +129,43 @@ fun MainScreen(
           CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
         }
         is MainScreenUiState.Success -> {
-          MainContent(
-            certificates = currentState.certificates,
-            isToggling = currentState.isToggling,
-            isRefreshing = currentState.isRefreshing,
-            onRefresh = { viewModel.refresh() },
-            onToggle = { disable -> 
-              if (viewModel.isRooted) {
-                viewModel.toggleAll(disable)
-              } else {
-                showRootWarning = true
+          Box(modifier = Modifier.fillMaxSize()) {
+            MainContent(
+              certificates = currentState.certificates,
+              isToggling = currentState.isToggling,
+              isRefreshing = currentState.isRefreshing,
+              onRefresh = { viewModel.refresh() },
+              onToggle = { disable -> 
+                if (viewModel.isRooted) {
+                  viewModel.toggleAll(disable)
+                } else {
+                  showRootWarning = true
+                }
+              },
+              modifier = Modifier.fillMaxSize()
+            )
+            
+            if (currentState.isRefreshing) {
+              Box(
+                modifier = Modifier
+                  .fillMaxSize(),
+                contentAlignment = Alignment.Center
+              ) {
+                Surface(
+                  shape = RoundedCornerShape(12.dp),
+                  color = MaterialTheme.colorScheme.surfaceVariant,
+                  tonalElevation = 8.dp,
+                  modifier = Modifier.size(80.dp)
+                ) {
+                  Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                    CircularProgressIndicator(
+                      modifier = Modifier.size(40.dp)
+                    )
+                  }
+                }
               }
-            },
-            modifier = Modifier.fillMaxSize()
-          )
+            }
+          }
         }
       }
     }
