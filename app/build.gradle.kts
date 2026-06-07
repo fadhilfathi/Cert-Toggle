@@ -11,8 +11,8 @@ android {
         applicationId = "com.example.certtoggle"
         minSdk = 24
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.0.2"
+        versionCode = 4
+        versionName = "1.0.3"
     }
 
     buildTypes {
@@ -37,6 +37,10 @@ android {
         excludes += "/META-INF/{AL2.0,LGPL2.1}"
       }
     }
+}
+
+base {
+    archivesName.set("cert-toggle")
 }
 
 kotlin {

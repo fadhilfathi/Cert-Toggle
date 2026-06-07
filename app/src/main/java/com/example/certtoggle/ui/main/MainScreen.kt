@@ -108,7 +108,8 @@ fun MainScreen(
             Icon(
               Icons.Default.Refresh, 
               contentDescription = "Refresh",
-              modifier = Modifier.rotate(rotation.value)
+              modifier = Modifier.rotate(rotation.value),
+              tint = Color(0xFF2196F3)
             )
           }
         },
@@ -133,7 +134,8 @@ fun MainScreen(
           PullToRefreshBox(
             isRefreshing = currentState.isRefreshing,
             onRefresh = { viewModel.refresh() },
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
+            indicator = {}
           ) {
             MainContent(
               certificates = currentState.certificates,
@@ -164,7 +166,8 @@ fun MainScreen(
                 ) {
                   Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                     CircularProgressIndicator(
-                      modifier = Modifier.size(40.dp)
+                      modifier = Modifier.size(40.dp),
+                      color = Color(0xFF2196F3)
                     )
                   }
                 }
